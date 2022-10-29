@@ -20,7 +20,10 @@ namespace BreathingApp
 
         private BreathState _breathState = BreathState.Waiting;
         private Image _progressBar;
-        private Button _button;
+        [SerializeField] private Button _mainButton;
+        [SerializeField] private Button _lockButton;
+        [SerializeField] private Image _lockIcon;
+        [SerializeField] private TextMeshProUGUI _lockAmountText;
         private TextMeshProUGUI _text;
         private Color _textOriginalColor;
         private float _lastClick = -DOUBLE_CLICK_OFFSET;
@@ -32,23 +35,58 @@ namespace BreathingApp
         private float TimeToHold { get; set; }
         private float TimeToExhale { get; set; }
         private int BreatheCount { get; set; }
-
+        private float LockedTime { get; set; } = -1f;
+        private float BreathingTime { get; set; }
+        
         private float HoldingFor => (Time.time - HoldStart);
         private float ExhalingFor => (Time.time - ExhaleStart);
-
+        
         private void Awake()
         {
+            Assert.IsNotNull(_mainButton);
+            Assert.IsNotNull(_lockButton);
+            Assert.IsNotNull(_lockIcon);
+            Assert.IsNotNull(_lockAmountText);
+            
+            _lockButton.gameObject.SetActive(false);
+            _lockAmountText.gameObject.SetActive(false);
             _progressBar = GetComponentInChildren<Image>();
-            _button = GetComponentInChildren<Button>();
-            _button.onClick.AddListener(OnClick);
             _text = GetComponentInChildren<TextMeshProUGUI>();
             _textOriginalColor = _text.color;
 
             Assert.IsNotNull(_progressBar);
-            Assert.IsNotNull(_button);
             Assert.IsNotNull(_text);
             
             SetState(BreathState.Waiting);
+        }
+
+        private void OnEnable()
+        {
+            _mainButton.onClick.AddListener(OnClick);
+            _lockButton.onClick.AddListener(OnLock); 
+        }
+
+        private void OnDisable()
+        {
+            _mainButton.onClick.RemoveListener(OnClick);
+            _lockButton.onClick.RemoveListener(OnLock); 
+        }
+
+        private void OnLock()
+        {
+            if (LockedTime > 0f)
+            {
+                LockedTime = -1f;
+                _lockIcon.gameObject.SetActive(true);
+                _lockAmountText.gameObject.SetActive(false);
+            }
+            else
+            {
+                LockedTime = TimeToHold * 0.25f;
+                _lockIcon.gameObject.SetActive(false);
+                _lockAmountText.text = LockedTime.ToString("F0");
+                _lockAmountText.gameObject.SetActive(true);
+            }
         }
 
         private void OnClick()
@@ -96,6 +134,7 @@ namespace BreathingApp
                     break;
                 case BreathState.Holding:
                     TimeToHold = (Time.time - BreathingStart) * 4;
+                    if (TimeToHold > 0f) { _lockButton.gameObject.SetActive(true); }
                     TimeToExhale = TimeToHold / 2f;
                     HoldStart = Time.time;
                     ExhaleStart = HoldStart + TimeToHold;
@@ -111,7 +150,7 @@ namespace BreathingApp
 
         private void OnDestroy()
         {
-            _button.onClick.RemoveListener(OnClick);
+            _mainButton.onClick.RemoveListener(OnClick);
         }
 
         private string GetStateMessage()
@@ -119,7 +158,9 @@ namespace BreathingApp
             switch (_breathState)
             {
                 case BreathState.Waiting: return "Ready?";
-                case BreathState.Breathing: return $"Breathe\n{BreatheCount}";
+                case BreathState.Breathing: return LockedTime > 0f 
+                    ? $"Breathe [{BreatheCount}]\n{Mathf.RoundToInt(BreathingStart + LockedTime - Time.time)}" 
+                    : $"Breathe\n{BreatheCount}";
                 case BreathState.Holding: return $"Hold! [{BreatheCount}]\n{Mathf.RoundToInt(HoldStart + TimeToHold - Time.time)}";
                 case BreathState.Exhaling: return $"Exhale [{BreatheCount}]\n{Mathf.RoundToInt(ExhaleStart + TimeToExhale - Time.time)}";
                 default: throw new ArgumentOutOfRangeException();
@@ -131,7 +172,17 @@ namespace BreathingApp
             switch (_breathState)
             {
                 case BreathState.Waiting:
+                    break;
                 case BreathState.Breathing:
+                    if (LockedTime > 0 && Time.time > BreathingStart + LockedTime)
+                    {
+                        SetState(BreathState.Holding);
+                    }
+                    else
+                    {
+                        float breathingPercentage = (Time.time - BreathingStart) / LockedTime;
+                        _progressBar.fillAmount = breathingPercentage;
+                    }
                     break;
                 case BreathState.Holding:
                     float holdPercentage = HoldingFor / TimeToHold;
