@@ -35,7 +35,7 @@ namespace BreathingApp
         private float TimeToHold { get; set; }
         private float TimeToExhale { get; set; }
         private int BreatheCount { get; set; }
-        private float LockedTime { get; set; } = -1f;
+        private float LockedTime { get; set; } = 0f;
         private float BreathingTime { get; set; }
         
         private float HoldingFor => (Time.time - HoldStart);
@@ -48,8 +48,7 @@ namespace BreathingApp
             Assert.IsNotNull(_lockIcon);
             Assert.IsNotNull(_lockAmountText);
             
-            _lockButton.gameObject.SetActive(false);
-            _lockAmountText.gameObject.SetActive(false);
+            ResetLock();
             _progressBar = GetComponentInChildren<Image>();
             _text = GetComponentInChildren<TextMeshProUGUI>();
             _textOriginalColor = _text.color;
@@ -60,6 +59,14 @@ namespace BreathingApp
             SetState(BreathState.Waiting);
         }
 
+        private void ResetLock()
+        {
+            LockedTime = 0f;
+            _lockButton.gameObject.SetActive(true);
+            _lockIcon.gameObject.SetActive(true);
+            _lockAmountText.gameObject.SetActive(false);
+        }
+        
         private void OnEnable()
         {
             _mainButton.onClick.AddListener(OnClick);
@@ -74,15 +81,13 @@ namespace BreathingApp
 
         private void OnLock()
         {
-            if (LockedTime > 0f)
+            if (LockedTime > 0f && !(_breathState == BreathState.Waiting))
             {
-                LockedTime = -1f;
-                _lockIcon.gameObject.SetActive(true);
-                _lockAmountText.gameObject.SetActive(false);
+                ResetLock();
             }
             else
             {
-                LockedTime = TimeToHold * 0.25f;
+                LockedTime = (_breathState == BreathState.Waiting ? LockedTime + 1 : TimeToHold * 0.25f);
                 _lockIcon.gameObject.SetActive(false);
                 _lockAmountText.text = LockedTime.ToString("F0");
                 _lockAmountText.gameObject.SetActive(true);
@@ -125,6 +130,7 @@ namespace BreathingApp
             switch (breathState)
             {
                 case BreathState.Waiting:
+                    ResetLock();
                     BreatheCount = 0;
                     _progressBar.fillAmount = 0f;
                     break;
